@@ -13,6 +13,8 @@
     --U:#F4D06F; --C:#9FD3A8; --A:#A9C7E8; --G:#E8A9A9; --T:#D7C4EC;
   }
   *{box-sizing:border-box}
+  button,.slot,.click,.aa,.key{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #errbox{display:none;position:fixed;left:12px;right:12px;bottom:12px;background:#fbe6e4;border:2px solid #C0261A;border-radius:10px;padding:10px 14px;font-size:14px;z-index:9}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",Calibri,Arial,sans-serif;font-size:17px;line-height:1.5}
   .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 60px}
   h1,h2{font-family:"Libre Franklin","Franklin Gothic Heavy",sans-serif;font-style:italic;font-weight:900;margin:0 0 10px}
@@ -99,7 +101,8 @@
       </div>
     </div>
     <div class="row"><button class="btn" id="pruef1" onclick="pruefe1()">Prüfen</button>
-      <button class="btn alt" id="weiter1" onclick="freischalten(2)" style="display:none">mRNA verlässt den Zellkern →</button></div>
+      <button class="btn alt" id="nochmal1" onclick="nochmal1()" style="display:none">Fehler selbst korrigieren</button>
+      <button class="btn" id="weiter1" onclick="freischalten(2)" style="display:none">Weiter: mRNA verlässt den Zellkern →</button></div>
     <div id="fb1" class="fb"></div>
   </section>
 
@@ -153,7 +156,9 @@
   </section>
 </div>
 
+<div id="errbox"></div>
 <script>
+window.onerror = function(msg, src, line){ var b = document.getElementById('errbox'); b.style.display = 'block'; b.textContent = 'Technischer Fehler: ' + msg + ' (Zeile ' + line + '). Bitte Screenshot an die Lehrkraft.'; };
 const DNA = ["T","A","C","A","C","C","G","G","T","C","T","A","A","T","T"];
 const KOMP = {A:"U", T:"A", G:"C", C:"G"};
 const CODE = {UUU:"Phe",UUC:"Phe",UUA:"Leu",UUG:"Leu",CUU:"Leu",CUC:"Leu",CUA:"Leu",CUG:"Leu",AUU:"Ile",AUC:"Ile",AUA:"Ile",AUG:"Met",GUU:"Val",GUC:"Val",GUA:"Val",GUG:"Val",UCU:"Ser",UCC:"Ser",UCA:"Ser",UCG:"Ser",CCU:"Pro",CCC:"Pro",CCA:"Pro",CCG:"Pro",ACU:"Thr",ACC:"Thr",ACA:"Thr",ACG:"Thr",GCU:"Ala",GCC:"Ala",GCA:"Ala",GCG:"Ala",UAU:"Tyr",UAC:"Tyr",UAA:"Stopp",UAG:"Stopp",CAU:"His",CAC:"His",CAA:"Gln",CAG:"Gln",AAU:"Asn",AAC:"Asn",AAA:"Lys",AAG:"Lys",GAU:"Asp",GAC:"Asp",GAA:"Glu",GAG:"Glu",UGU:"Cys",UGC:"Cys",UGA:"Stopp",UGG:"Trp",CGU:"Arg",CGC:"Arg",CGA:"Arg",CGG:"Arg",AGU:"Ser",AGC:"Ser",AGA:"Arg",AGG:"Arg",GGU:"Gly",GGC:"Gly",GGA:"Gly",GGG:"Gly"};
@@ -170,7 +175,7 @@ function el(tag, cls, txt){ const e = document.createElement(tag); if(cls) e.cla
 function triplets(arr, mk){ const box = el("div","row"); box.style.margin = "0";
   for(let t=0;t<arr.length/3;t++){ const tr = el("div","trip"); for(let i=0;i<3;i++) tr.appendChild(mk(arr[t*3+i], t*3+i)); box.appendChild(tr);} return box; }
 
-function zeige(n){ [1,2,3].forEach(i => { document.getElementById("s"+i).style.display = i===n ? "" : "none"; document.getElementById("tab"+i).classList.toggle("on", i===n); }); window.scrollTo({top:0, behavior:"smooth"}); }
+function zeige(n){ [1,2,3].forEach(i => { document.getElementById("s"+i).style.display = i===n ? "" : "none"; document.getElementById("tab"+i).classList.toggle("on", i===n); }); try { window.scrollTo(0, 0); } catch(e) {} }
 function freischalten(n){ document.getElementById("tab"+n).disabled = false; zeige(n); if(n===2) startTranslation(); if(n===3) renderMut(); }
 
 /* ---------- Schritt 1 ---------- */
@@ -184,7 +189,15 @@ function render1(){
     else s.onclick = () => { sel = i; render1(); };
     return s; }));
 }
-function setze(b){ if(geprueft) return; eingabe[sel] = b; sel = Math.min(14, sel+1); render1(); }
+function setze(b){
+  if(geprueft) return;
+  eingabe[sel] = b;
+  // zum nächsten leeren Feld springen (vorwärts, dann von vorn)
+  let n = -1;
+  for(let k=1;k<=15;k++){ const j = (sel+k)%15; if(!eingabe[j]){ n = j; break; } }
+  if(n >= 0) sel = n;
+  render1();
+}
 document.addEventListener("keydown", e => { const k = e.key.toUpperCase(); if(!geprueft && "AUGC".includes(k) && k.length===1 && document.getElementById("s1").style.display !== "none") setze(k); });
 function pruefe1(){
   if(eingabe.some(b => !b)){ const f = document.getElementById("fb1"); f.className = "fb no"; f.textContent = "Fülle zuerst alle 15 Felder aus."; return; }
@@ -198,6 +211,19 @@ function pruefe1(){
     : "<b>Alle 15 Basen richtig!</b> Die mRNA ist eine komplementäre Kopie des Gens, mit Uracil statt Thymin.";
   document.getElementById("pruef1").disabled = true;
   document.getElementById("weiter1").style.display = "";
+  document.getElementById("nochmal1").style.display = fehler ? "" : "none";
+  document.getElementById("weiter1").scrollIntoView({block: "center"});
+}
+function nochmal1(){
+  // falsche Felder leeren, richtige behalten
+  eingabe = eingabe.map((b,i) => b === SOLL_RNA[i] ? b : null);
+  sel = eingabe.indexOf(null); if(sel < 0) sel = 0;
+  geprueft = false;
+  document.getElementById("pruef1").disabled = false;
+  document.getElementById("nochmal1").style.display = "none";
+  document.getElementById("weiter1").style.display = "none";
+  const f = document.getElementById("fb1"); f.className = "fb no"; f.textContent = "Die falschen Felder sind wieder leer. Fülle sie neu aus und prüfe noch einmal.";
+  render1();
 }
 
 /* ---------- Schritt 2 ---------- */
