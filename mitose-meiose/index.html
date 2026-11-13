@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zellteilungs-Simulator: Mitose und Meiose</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400;0,600;0,700;1,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E2E8E6; --ink: #1b1b1b; --green: #77BC1B; --m: #D0281C; --v: #2F6FB5;
+    --cell: #FFF2B3; --cellEdge: #8A6D1F; --card: #ffffff; --muted: #5b625f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Libre Franklin", system-ui, sans-serif; font-size: 17px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+  header { padding: 18px 20px 6px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-weight: 900; font-style: italic; font-size: clamp(24px, 3.6vw, 36px); margin: 0 0 6px; line-height: 1.25; }
+  h1 span, h2 span { background: var(--green); padding: 0 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  h2 { font-weight: 900; font-style: italic; font-size: 24px; margin: 0 0 6px; }
+  .intro { margin: 4px 0 10px; color: #333; max-width: 900px; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; font-size: 15px; }
+  .chip { display: inline-block; width: 26px; height: 10px; border-radius: 5px; border: 1.5px solid #333; vertical-align: middle; margin-right: 6px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 8px 14px 30px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .panels { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border-radius: 14px; padding: 14px 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.12); display: flex; flex-direction: column; }
+  .sub { color: var(--muted); font-size: 15px; margin: -2px 0 6px; }
+  .stage { width: 100%; aspect-ratio: 400 / 320; background: #fbfbf7; border-radius: 10px; border: 1px solid #d9ddd6; touch-action: manipulation; }
+  .stage .chromatid { transition: transform .75s ease, opacity .6s ease; }
+  .stage .cen { transition: transform .75s ease, opacity .4s ease; }
+  .phase { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 2px; flex-wrap: wrap; }
+  .phase .name { font-weight: 700; font-size: 20px; }
+  .phase .step { color: var(--muted); font-size: 14px; }
+  .text { min-height: 78px; margin: 2px 0 8px; }
+  .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+  .counter { background: #f1f4f2; border-radius: 8px; padding: 6px 6px; text-align: center; font-size: 12.5px; color: var(--muted); }
+  .counter b { display: block; font-size: 17px; color: var(--ink); }
+  .counter.changed b { animation: pop .6s ease; }
+  @keyframes pop { 0% { color: #d0281c; transform: scale(1.25); } 100% { color: var(--ink); transform: scale(1); } }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+  button { font: inherit; font-size: 16px; border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; min-height: 46px; }
+  .btn-next { background: var(--green); color: #102000; font-weight: 700; flex: 1; }
+  .btn-back { background: #dfe5e2; }
+  .btn-reset { background: #dfe5e2; }
+  .btn-dice { background: #ffe680; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .task { background: #f7fbef; border-left: 5px solid var(--green); border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: 15px; }
+  .hidden { display: none !important; }
+  .quiz { background: var(--card); border-radius: 14px; padding: 16px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .q { margin: 12px 0 16px; }
+  .q p { margin: 0 0 6px; font-weight: 600; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { background: #eef2ef; text-align: left; }
+  .opt.right { background: #cdeaa6; }
+  .opt.wrong { background: #f6c7c2; }
+  .fb { font-size: 15px; margin-top: 6px; min-height: 1em; }
+  .score { font-weight: 700; }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 20px 24px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Mitose und Meiose im Vergleich</span></h1>
+  <p class="intro">Spiele beide Kernteilungen Schritt für Schritt durch. Die Modellzelle hat <b>zwei Chromosomenpaare</b> (2n = 4). Achte bei jedem Schritt auf die Zahlen unter der Zelle.</p>
+  <div class="legend">
+    <span><span class="chip" style="background:var(--m)"></span>mütterlicher Herkunft</span>
+    <span><span class="chip" style="background:var(--v)"></span>väterlicher Herkunft</span>
+    <span>● Centromer</span>
+  </div>
+</header>
+<main>
+  <div class="panels">
+    <section class="panel" id="p-mitose">
+      <h2><span>Mitose</span></h2>
+      <div class="sub">Körperzelle · Wachstum und Regeneration</div>
+      <svg class="stage" viewBox="0 0 400 320" aria-label="Zelle Mitose"></svg>
+      <div class="phase"><span class="name"></span><span class="step"></span></div>
+      <div class="text"></div>
+      <div class="counters"></div>
+      <div class="controls">
+        <button class="btn-back">◀ Zurück</button>
+        <button class="btn-next">Weiter ▶</button>
+        <button class="btn-reset">↺ Neu</button>
+      </div>
+    </section>
+    <section class="panel" id="p-meiose">
+      <h2><span>Meiose</span></h2>
+      <div class="sub">Geschlechtsmutterzelle · Bildung von Geschlechtszellen</div>
+      <svg class="stage" viewBox="0 0 400 320" aria-label="Zelle Meiose"></svg>
+      <div class="phase"><span class="name"></span><span class="step"></span></div>
+      <div class="text"></div>
+      <div class="task dice-task hidden">🎲 Die homologen Chromosomen ordnen sich <b>zufällig</b> an. Tippe auf „Neu anordnen“ und gehe danach weiter: Welche Geschlechtszellen entstehen jetzt? Wie viele verschiedene Kombinationen findest du?</div>
+      <div class="counters"></div>
+      <div class="controls">
+        <button class="btn-back">◀ Zurück</button>
+        <button class="btn-next">Weiter ▶</button>
+        <button class="btn-dice hidden">🎲 Neu anordnen</button>
+        <button class="btn-reset">↺ Neu</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="quiz">
+    <h2><span>Teste dich</span></h2>
+    <div id="quiz"></div>
+    <div class="score" id="score"></div>
+  </section>
+</main>
+<footer>Biologie Klasse 10 · Genetik · Modell vereinfacht: zwei Chromosomenpaare statt 23.</footer>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  var COL = { m: "#D0281C", v: "#2F6FB5" };
+  // Chromosomen: 0 lang/muetterlich, 1 lang/vaeterlich, 2 kurz/muetterlich, 3 kurz/vaeterlich
+  var CHR = [{ k: "m", L: 46 }, { k: "v", L: 46 }, { k: "m", L: 30 }, { k: "v", L: 30 }];
+  var CX = 200, CY = 160;
+
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var a in attrs) e.setAttribute(a, attrs[a]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // Position der Chromatiden eines Chromosoms (two = Zwei-Chromatid-Chromosom)
+  function chrom(c, x, y, a, two, op) {
+    var r = a * Math.PI / 180, d = two ? 5.5 : 0;
+    var ox = d * Math.sin(r), oy = -d * Math.cos(r);
+    return [
+      { c: c, j: 0, x: x + ox, y: y + oy, a: a, op: op },
+      { c: c, j: 1, x: x - ox, y: y - oy, a: a, op: two ? op : 0 },
+      { cen: c, x: x, y: y, op: two && op > 0.6 ? 1 : 0 }
+    ];
+  }
+
+  // ---------- Hintergrund-Zeichnungen
+  function cellCircle(g, x, y, r) { el("circle", { cx: x, cy: y, r: r, fill: "#FFF2B3", stroke: "#8A6D1F", "stroke-width": 2.2 }, g); }
+  function nucleus(g, x, y, r, dashed) {
+    el("circle", { cx: x, cy: y, r: r, fill: dashed ? "none" : "#fbe6a0", stroke: "#8A6D1F", "stroke-width": 1.6, "stroke-dasharray": dashed ? "6 5" : "" }, g);
+  }
+  function pinched(g, y1, y2, r) {
+    // Zelle mit Einschnuerung (zwei sich ueberlappende Kreise, aeussere Kontur)
+    var d = (y2 - y1) / 2, ym = (y1 + y2) / 2, h = Math.sqrt(r * r - d * d);
+    var path = "M " + (CX - h) + " " + ym + " A " + r + " " + r + " 0 1 1 " + (CX + h) + " " + ym +
+               " A " + r + " " + r + " 0 1 1 " + (CX - h) + " " + ym + " Z";
+    el("path", { d: path, fill: "#FFF2B3", stroke: "#8A6D1F", "stroke-width": 2.2 }, g);
+  }
+  function pole(g, x, y) {
+    for (var i = 0; i < 8; i++) {
+      var a = i * Math.PI / 4;
+      el("line", { x1: x, y1: y, x2: x + 7 * Math.cos(a), y2: y + 7 * Math.sin(a), stroke: "#8f8f8f", "stroke-width": 1.4 }, g);
+    }
+  }
+  function fibers(g, px, py, targets) {
+    targets.forEach(function (t) { el("line", { x1: px, y1: py, x2: t[0], y2: t[1], stroke: "#9a9a9a", "stroke-width": 1.2 }, g); });
+  }
+  function equator(g, x1, y1, x2, y2) { el("line", { x1: x1, y1: y1, x2: x2, y2: y2, stroke: "#9a9a9a", "stroke-width": 1, "stroke-dasharray": "3 4" }, g); }
+  function label(g, x, y, t) { var e = el("text", { x: x, y: y, "text-anchor": "middle", "font-size": 13, fill: "#444", "font-family": "Libre Franklin, sans-serif" }, g); e.textContent = t; }
+
+  // ---------- gemeinsame Anfangsschritte
+  var interPos = [[168, 140, 30], [232, 136, -40], [172, 188, -15], [230, 186, 60]];
+  function interphase(two) {
+    return {
+      bg: function (g) { cellCircle(g, CX, CY, 120); nucleus(g, CX, CY, 74, false); label(g, CX, 300, two ? "Chromatin – DNA verdoppelt" : "Chromatin – Chromosomen nicht sichtbar"); },
+      parts: [0, 1, 2, 3].reduce(function (acc, c) { var p = interPos[c]; return acc.concat(chrom(c, p[0], p[1], p[2], two, 0.3)); }, [])
+    };
+  }
+
+  // ---------- MITOSE
+  var metX = [-78, -26, 26, 78];
+  var mitoseSteps = [
+    { name: "Interphase", text: "Der Zellkern ist von einer Kernhülle umgeben. Die Chromosomen liegen entschraubt als Chromatin vor und sind nicht sichtbar. Jedes Chromosom besteht aus <b>einem</b> Chromatid.",
+      cnt: [1, 4, "diploid", "Ein-Chromatid"], draw: function () { return interphase(false); } },
+    { name: "Interphase (Ende)", text: "Vor der Teilung wird die DNA verdoppelt: Aus jedem Ein-Chromatid-Chromosom wird ein <b>Zwei-Chromatid-Chromosom</b>. Die Chromosomenzahl bleibt gleich!",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () { return interphase(true); } },
+    { name: "Prophase", text: "Die Chromosomen verkürzen sich durch Aufschraubung und Faltung und werden sichtbar. Die Kernhülle wird abgebaut, an den Zellpolen bilden sich die Spindelfasern.",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () {
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); nucleus(g, CX, CY, 78, true); pole(g, CX, 52); pole(g, CX, 268); },
+          parts: [0, 1, 2, 3].reduce(function (acc, c) { var p = interPos[c]; return acc.concat(chrom(c, p[0], p[1], p[2], true, 1)); }, []) };
+      } },
+    { name: "Metaphase", text: "Die Spindelfasern ziehen die Chromosomen in die Zellmitte. Sie ordnen sich in der <b>Äquatorialebene</b> an. Jedes Chromatid ist mit einem anderen Zellpol verbunden.",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () {
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); equator(g, 90, CY, 310, CY); pole(g, CX, 52); pole(g, CX, 268);
+            fibers(g, CX, 52, metX.map(function (x) { return [CX + x, CY - 6]; })); fibers(g, CX, 268, metX.map(function (x) { return [CX + x, CY + 6]; })); },
+          parts: [0, 1, 2, 3].reduce(function (acc, c) { return acc.concat(chrom(c, CX + metX[c], CY, 0, true, 1)); }, []) };
+      } },
+    { name: "Anaphase", text: "Die Spindelfasern verkürzen sich. Die Chromatiden jedes Zwei-Chromatid-Chromosoms werden getrennt und als <b>Ein-Chromatid-Chromosomen</b> zu den entgegengesetzten Polen gezogen.",
+      cnt: [1, "4 + 4", "–", "Ein-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1, 2, 3].forEach(function (c) {
+          parts.push({ c: c, j: 0, x: CX + metX[c], y: CY - 72, a: 0, op: 1 }, { c: c, j: 1, x: CX + metX[c], y: CY + 72, a: 0, op: 1 }, { cen: c, x: CX + metX[c], y: CY, op: 0 });
+        });
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); pole(g, CX, 52); pole(g, CX, 268);
+            fibers(g, CX, 52, metX.map(function (x) { return [CX + x, CY - 72]; })); fibers(g, CX, 268, metX.map(function (x) { return [CX + x, CY + 72]; })); }, parts: parts };
+      } },
+    { name: "Telophase", text: "Die Chromosomen entschrauben sich wieder. Neue Kernhüllen entstehen: Es liegen <b>zwei Tochterkerne</b> vor. Die Zelle beginnt sich einzuschnüren.",
+      cnt: [1, "2 Kerne × 4", "diploid", "Ein-Chromatid"], draw: function () {
+        var parts = [], xs = [-27, -9, 9, 27];
+        [0, 1, 2, 3].forEach(function (c) {
+          parts.push({ c: c, j: 0, x: CX + xs[c], y: 86, a: 90, op: 0.75 }, { c: c, j: 1, x: CX + xs[c], y: 234, a: 90, op: 0.75 }, { cen: c, x: CX, y: CY, op: 0 });
+        });
+        return { bg: function (g) { pinched(g, 86, 234, 82); nucleus(g, CX, 86, 46, false); nucleus(g, CX, 234, 46, false); }, parts: parts };
+      } },
+    { name: "Zellteilung", text: "Durch neue Zellmembranen entstehen <b>zwei Tochterzellen</b>. Sie haben dieselbe Chromosomenzahl wie die Mutterzelle und sind <b>genetisch identisch</b>.",
+      cnt: [2, 4, "diploid", "Ein-Chromatid"], draw: function () {
+        var parts = [], xs = [-27, -9, 9, 27];
+        [0, 1, 2, 3].forEach(function (c) {
+          parts.push({ c: c, j: 0, x: CX + xs[c], y: 82, a: 90, op: 0.45 }, { c: c, j: 1, x: CX + xs[c], y: 238, a: 90, op: 0.45 }, { cen: c, x: CX, y: CY, op: 0 });
+        });
+        return { bg: function (g) { cellCircle(g, CX, 82, 74); cellCircle(g, CX, 238, 74); nucleus(g, CX, 82, 46, false); nucleus(g, CX, 238, 46, false);
+            label(g, 330, 86, "Tochterzelle"); label(g, 330, 242, "Tochterzelle"); }, parts: parts };
+      } }
+  ];
+
+  // ---------- MEIOSE
+  var orient = [0, 1]; // je Paar: 0 = muetterliches Chromosom oben, 1 = vaeterliches oben
+  function topOf(pair) { var a = pair * 2; return orient[pair] === 0 ? a : a + 1; }
+  function botOf(pair) { var a = pair * 2; return orient[pair] === 0 ? a + 1 : a; }
+  var pairX = [CX - 52, CX + 52];
+
+  function combText() {
+    var t = (orient[0] === 0 ? "lang ● rot" : "lang ● blau") + " + " + (orient[1] === 0 ? "kurz ● rot" : "kurz ● blau");
+    return t;
+  }
+
+  var meioseSteps = [
+    { name: "Interphase", text: "Die Geschlechtsmutterzelle hat einen <b>doppelten (diploiden)</b> Chromosomensatz: Zu jedem Chromosom gibt es ein <b>homologes</b> Chromosom – eines mütterlicher, eines väterlicher Herkunft.",
+      cnt: [1, 4, "diploid", "Ein-Chromatid"], draw: function () { return interphase(false); } },
+    { name: "Interphase (Ende)", text: "Wie vor der Mitose wird die DNA verdoppelt: Es liegen <b>Zwei-Chromatid-Chromosomen</b> vor.",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () { return interphase(true); } },
+    { name: "Prophase I", text: "Die Chromosomen werden sichtbar. <b>Neu gegenüber der Mitose:</b> Die homologen Chromosomen finden sich zu Paaren zusammen.",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () {
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); nucleus(g, CX, CY, 78, true); pole(g, CX, 52); pole(g, CX, 268); },
+          parts: [].concat(chrom(0, 152, 158, 80, true, 1), chrom(1, 174, 155, 80, true, 1), chrom(2, 228, 168, 75, true, 1), chrom(3, 250, 165, 75, true, 1)) };
+      } },
+    { name: "Metaphase I", dice: true, text: "Die homologen <b>Paare</b> ordnen sich in der Äquatorialebene an – nach dem <b>Zufallsprinzip</b>: Mal liegt das mütterliche, mal das väterliche Chromosom oben.",
+      cnt: [1, 4, "diploid", "Zwei-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) { parts = parts.concat(chrom(topOf(p), pairX[p], CY - 15, 0, true, 1), chrom(botOf(p), pairX[p], CY + 15, 0, true, 1)); });
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); equator(g, 90, CY, 310, CY); pole(g, CX, 52); pole(g, CX, 268);
+            fibers(g, CX, 52, pairX.map(function (x) { return [x, CY - 26]; })); fibers(g, CX, 268, pairX.map(function (x) { return [x, CY + 26]; })); }, parts: parts };
+      } },
+    { name: "Anaphase I", text: "Die <b>homologen Chromosomen</b> werden getrennt und zu den Polen gezogen. Die Chromatiden bleiben zusammen – es wandern ganze Zwei-Chromatid-Chromosomen.",
+      cnt: [1, "2 + 2", "–", "Zwei-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) { parts = parts.concat(chrom(topOf(p), pairX[p], CY - 72, 0, true, 1), chrom(botOf(p), pairX[p], CY + 72, 0, true, 1)); });
+        return { bg: function (g) { cellCircle(g, CX, CY, 120); pole(g, CX, 52); pole(g, CX, 268);
+            fibers(g, CX, 52, pairX.map(function (x) { return [x, CY - 78]; })); fibers(g, CX, 268, pairX.map(function (x) { return [x, CY + 78]; })); }, parts: parts };
+      } },
+    { name: "Telophase I", text: "Ende der <b>1. Reifeteilung (Reduktionsteilung)</b>: Zwei Zellen mit je einem <b>einfachen (haploiden)</b> Chromosomensatz – aber noch aus Zwei-Chromatid-Chromosomen. Es folgt keine Interphase!",
+      cnt: [2, 2, "haploid", "Zwei-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) { parts = parts.concat(chrom(topOf(p), CX + (p ? 22 : -22), 82, 90, true, 1), chrom(botOf(p), CX + (p ? 22 : -22), 238, 90, true, 1)); });
+        return { bg: function (g) { cellCircle(g, CX, 82, 74); cellCircle(g, CX, 238, 74); }, parts: parts };
+      } },
+    { name: "Metaphase II", text: "<b>2. Reifeteilung:</b> In beiden Zellen ordnen sich die Chromosomen in der Äquatorialebene an – wie bei der Mitose.",
+      cnt: [2, 2, "haploid", "Zwei-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) {
+          parts = parts.concat(chrom(topOf(p), CX, 82 + (p ? 22 : -22), 90, true, 1), chrom(botOf(p), CX, 238 + (p ? 22 : -22), 90, true, 1));
+        });
+        return { bg: function (g) {
+            [82, 238].forEach(function (y) { cellCircle(g, CX, y, 74); equator(g, CX, y - 64, CX, y + 64); pole(g, CX - 64, y); pole(g, CX + 64, y);
+              fibers(g, CX - 64, y, [[CX - 6, y - 22], [CX - 6, y + 22]]); fibers(g, CX + 64, y, [[CX + 6, y - 22], [CX + 6, y + 22]]); });
+          }, parts: parts };
+      } },
+    { name: "Anaphase II", text: "Jetzt werden die <b>Chromatiden</b> getrennt – wie in der Anaphase der Mitose. Sie wandern als Ein-Chromatid-Chromosomen zu den Polen.",
+      cnt: [2, "2 + 2", "–", "Ein-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) {
+          [[topOf(p), 82], [botOf(p), 238]].forEach(function (q) {
+            var y = q[1] + (p ? 22 : -22);
+            parts.push({ c: q[0], j: 0, x: CX + 46, y: y, a: 90, op: 1 }, { c: q[0], j: 1, x: CX - 46, y: y, a: 90, op: 1 }, { cen: q[0], x: CX, y: y, op: 0 });
+          });
+        });
+        return { bg: function (g) { [82, 238].forEach(function (y) { cellCircle(g, CX, y, 74); pole(g, CX - 64, y); pole(g, CX + 64, y); }); }, parts: parts };
+      } },
+    { name: "Telophase II", text: "Ende der Meiose: Aus einer Geschlechtsmutterzelle sind <b>vier haploide Geschlechtszellen</b> entstanden. Sie sind genetisch <b>verschieden</b> von der Mutterzelle.",
+      cnt: [4, 2, "haploid", "Ein-Chromatid"], draw: function () {
+        var parts = [];
+        [0, 1].forEach(function (p) {
+          [[topOf(p), 82], [botOf(p), 238]].forEach(function (q) {
+            var dx = p ? 10 : -10;
+            parts.push({ c: q[0], j: 0, x: 292 + dx, y: q[1], a: 90, op: 1 }, { c: q[0], j: 1, x: 108 + dx, y: q[1], a: 90, op: 1 }, { cen: q[0], x: CX, y: q[1], op: 0 });
+          });
+        });
+        return { bg: function (g) { [[108, 82], [292, 82], [108, 238], [292, 238]].forEach(function (c) { cellCircle(g, c[0], c[1], 58); }); label(g, CX, CY + 5, "4 Geschlechtszellen"); }, parts: parts };
+      } }
+  ];
+
+  var CNT_LABELS = ["Zellen", "Chromosomen je Zelle", "Chromosomensatz", "Chromosomen-Typ"];
+
+  function Panel(root, steps, opts) {
+    var svg = root.querySelector("svg"), self = this;
+    var bg = el("g", {}, svg), fg = el("g", {}, svg);
+    var chromatids = {}, cens = {};
+    CHR.forEach(function (ch, c) {
+      [0, 1].forEach(function (j) {
+        var g = el("g", { "class": "chromatid" }, fg);
+        el("rect", { x: -ch.L / 2, y: -4.5, width: ch.L, height: 9, rx: 4.5, fill: COL[ch.k], stroke: "#2b2b2b", "stroke-width": 1.4 }, g);
+        g.style.transform = "translate(" + CX + "px," + CY + "px)";
+        chromatids[c + "-" + j] = g;
+      });
+      var cg = el("g", { "class": "cen" }, fg);
+      el("circle", { cx: 0, cy: 0, r: 3.6, fill: "#555" }, cg);
+      cens[c] = cg;
+    });
+    var nameEl = root.querySelector(".phase .name"), stepEl = root.querySelector(".phase .step"), textEl = root.querySelector(".text");
+    var cntEl = root.querySelector(".counters");
+    var back = root.querySelector(".btn-back"), next = root.querySelector(".btn-next"), reset = root.querySelector(".btn-reset");
+    var dice = root.querySelector(".btn-dice"), diceTask = root.querySelector(".dice-task");
+    var i = 0, lastCnt = null;
+
+    function render() {
+      var s = steps[i], d = s.draw();
+      while (bg.firstChild) bg.removeChild(bg.firstChild);
+      d.bg(bg);
+      d.parts.forEach(function (p) {
+        if (p.cen !== undefined) {
+          var cg = cens[p.cen];
+          cg.style.transform = "translate(" + p.x + "px," + p.y + "px)";
+          cg.style.opacity = p.op;
+        } else {
+          var g = chromatids[p.c + "-" + p.j];
+          g.style.transform = "translate(" + p.x + "px," + p.y + "px) rotate(" + p.a + "deg)";
+          g.style.opacity = p.op;
+        }
+      });
+      nameEl.textContent = s.name;
+      stepEl.textContent = "Schritt " + (i + 1) + " von " + steps.length;
+      textEl.innerHTML = s.text + (s.dice ? " <br><i>Aktuell oben: " + combText() + "</i>" : "");
+      cntEl.innerHTML = "";
+      s.cnt.forEach(function (v, k) {
+        var div = document.createElement("div");
+        div.className = "counter" + (lastCnt && String(lastCnt[k]) !== String(v) ? " changed" : "");
+        div.innerHTML = "<b>" + v + "</b>" + CNT_LABELS[k];
+        cntEl.appendChild(div);
+      });
+      lastCnt = s.cnt;
+      back.disabled = i === 0;
+      next.disabled = i === steps.length - 1;
+      next.textContent = i === steps.length - 1 ? "Fertig ✓" : "Weiter ▶";
+      if (dice) { dice.classList.toggle("hidden", !s.dice); diceTask.classList.toggle("hidden", !s.dice); }
+    }
+    back.addEventListener("click", function () { if (i > 0) { i--; render(); } });
+    next.addEventListener("click", function () { if (i < steps.length - 1) { i++; render(); } });
+    reset.addEventListener("click", function () { i = 0; lastCnt = null; render(); });
+    if (dice) dice.addEventListener("click", function () {
+      var old = orient.join("");
+      do { orient = [Math.random() < 0.5 ? 0 : 1, Math.random() < 0.5 ? 0 : 1]; } while (orient.join("") === old);
+      render();
+    });
+    render();
+  }
+
+  new Panel(document.getElementById("p-mitose"), mitoseSteps);
+  new Panel(document.getElementById("p-meiose"), meioseSteps);
+
+  // ---------- Quiz
+  var QUIZ = [
+    { q: "Wie viele Tochterzellen entstehen bei der Meiose aus einer Geschlechtsmutterzelle?", o: ["2", "4", "8"], r: 1,
+      e: "Zwei Reifeteilungen nacheinander: 1 → 2 → 4 Zellen." },
+    { q: "Was wird in der 1. Reifeteilung (Anaphase I) voneinander getrennt?", o: ["die Chromatiden", "die homologen Chromosomen", "die Kernhüllen"], r: 1,
+      e: "In der Anaphase I wandern ganze Zwei-Chromatid-Chromosomen – die Partner eines homologen Paares werden getrennt." },
+    { q: "Eine Körperzelle des Menschen hat 46 Chromosomen. Wie viele hat jede Tochterzelle nach der Mitose?", o: ["23", "46", "92"], r: 1,
+      e: "Mitose: Die Tochterzellen haben dieselbe Chromosomenzahl wie die Mutterzelle (diploid)." },
+    { q: "Warum sind die Geschlechtszellen eines Menschen genetisch verschieden?", o: ["Weil in der Metaphase I die homologen Chromosomen zufällig angeordnet werden", "Weil bei der Mitose Fehler passieren", "Weil vor der 2. Reifeteilung die DNA erneut verdoppelt wird"], r: 0,
+      e: "Zufällige Anordnung → jede Geschlechtszelle erhält eine andere Mischung mütterlicher und väterlicher Chromosomen (Rekombination)." }
+  ];
+  var quizEl = document.getElementById("quiz"), scoreEl = document.getElementById("score"), answered = 0, correct = 0;
+  QUIZ.forEach(function (item, n) {
+    var box = document.createElement("div"); box.className = "q";
+    box.innerHTML = "<p>" + (n + 1) + ". " + item.q + "</p>";
+    var opts = document.createElement("div"); opts.className = "opts";
+    var fb = document.createElement("div"); fb.className = "fb";
+    item.o.forEach(function (txt, k) {
+      var b = document.createElement("button"); b.className = "opt"; b.textContent = txt;
+      b.addEventListener("click", function () {
+        if (box.dataset.done) return;
+        box.dataset.done = "1"; answered++;
+        if (k === item.r) { b.classList.add("right"); correct++; fb.innerHTML = "✓ Richtig. " + item.e; }
+        else { b.classList.add("wrong"); opts.children[item.r].classList.add("right"); fb.innerHTML = "✗ Leider nicht. " + item.e; }
+        if (answered === QUIZ.length) scoreEl.textContent = "Ergebnis: " + correct + " von " + QUIZ.length + " richtig.";
+      });
+      opts.appendChild(b);
+    });
+    box.appendChild(opts); box.appendChild(fb); quizEl.appendChild(box);
+  });
+})();
+</script>
+</body>
+</html>
